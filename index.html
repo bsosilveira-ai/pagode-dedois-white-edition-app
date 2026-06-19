@@ -481,6 +481,8 @@
     <div class="footer-note">Pagode DêDois White Edition • Controle interno de ingressos</div>
   </div>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script>
     const lotesBase = [
       { id: "promocional", nome: "Lote Promocional", limite: 50, valor: 30 },
@@ -489,14 +491,30 @@
       { id: "hora", nome: "Portaria / Na hora", limite: 50, valor: 80 }
     ];
 
-    let vendas = JSON.parse(localStorage.getItem("vendasPagodeDeDoisPremium")) || [];
+    let vendas = [];
+    let firebasePronto = false;
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCAo4ytHWQmLGbSuEvI9432u5ddSNuyobI",
+      authDomain: "pagode-dedois-white-edition.firebaseapp.com",
+      projectId: "pagode-dedois-white-edition",
+      storageBucket: "pagode-dedois-white-edition.firebasestorage.app",
+      messagingSenderId: "810556412481",
+      appId: "1:810556412481:web:bb5efaac5e7bc2de2f6cc0",
+      measurementId: "G-L7QET34QTJ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const vendasRef = db.collection("vendas");
 
     function moeda(v) {
       return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     }
 
     function salvar() {
-      localStorage.setItem("vendasPagodeDeDoisPremium", JSON.stringify(vendas));
+      // Agora as vendas são salvas no Firebase/Firestore.
+      // Esta função ficou apenas para manter compatibilidade com o restante do código.
     }
 
     function validas() {
@@ -555,7 +573,9 @@
 
     document.getElementById("lote").addEventListener("change", atualizarValor);
 
-    function salvarVenda() {
+    async function salvarVenda() {
+      if (!firebasePronto) return alert("Aguarde a conexão com o Firebase carregar.");
+
       const nome = document.getElementById("nome").value.trim();
       const whatsapp = document.getElementById("whatsapp").value.trim();
       const quantidade = Number(document.getElementById("quantidade").value);
@@ -573,8 +593,10 @@
       const restam = lote.limite - vendidosLote(loteId);
       if (quantidade > restam) return alert(`Esse lote só tem ${restam} ingresso(s) restante(s).`);
 
-      vendas.push({
-        id: Date.now(),
+      const id = Date.now();
+
+      const venda = {
+        id,
         data: new Date().toLocaleString("pt-BR"),
         nome,
         whatsapp,
@@ -586,17 +608,21 @@
         vendedor,
         status,
         observacao
-      });
+      };
 
-      salvar();
+      try {
+        await vendasRef.doc(String(id)).set(venda);
 
-      document.getElementById("nome").value = "";
-      document.getElementById("whatsapp").value = "";
-      document.getElementById("quantidade").value = 1;
-      document.getElementById("observacao").value = "";
+        document.getElementById("nome").value = "";
+        document.getElementById("whatsapp").value = "";
+        document.getElementById("quantidade").value = 1;
+        document.getElementById("observacao").value = "";
 
-      renderizar();
-      alert("Venda registrada com sucesso!");
+        alert("Venda registrada com sucesso!");
+      } catch (erro) {
+        console.error("Erro ao registrar venda:", erro);
+        alert("Não consegui salvar no Firebase. Confira as regras do Firestore.");
+      }
     }
 
     function renderLotes() {
@@ -671,11 +697,15 @@
         });
     }
 
-    function cancelar(id) {
+    async function cancelar(id) {
       if (!confirm("Cancelar essa venda?")) return;
-      vendas = vendas.map(v => v.id === id ? { ...v, status: "Cancelado" } : v);
-      salvar();
-      renderizar();
+
+      try {
+        await vendasRef.doc(String(id)).update({ status: "Cancelado" });
+      } catch (erro) {
+        console.error("Erro ao cancelar venda:", erro);
+        alert("Não consegui cancelar no Firebase.");
+      }
     }
 
     function exportarCSV() {
@@ -702,12 +732,23 @@
       window.open(`https://wa.me/?text=${texto}`, "_blank");
     }
 
-    function limparTudo() {
+    async function limparTudo() {
       if (!confirm("Tem certeza que deseja apagar tudo?")) return;
       if (!confirm("Confirma mesmo? Essa ação não tem volta.")) return;
-      vendas = [];
-      salvar();
-      renderizar();
+
+      try {
+        const snap = await vendasRef.get();
+        const batch = db.batch();
+
+        snap.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+
+        await batch.commit();
+      } catch (erro) {
+        console.error("Erro ao apagar vendas:", erro);
+        alert("Não consegui apagar as vendas no Firebase.");
+      }
     }
 
     function renderizar() {
@@ -717,7 +758,23 @@
       renderTabela();
     }
 
-    renderizar();
+    function iniciarFirebase() {
+      vendasRef.orderBy("id", "asc").onSnapshot(snapshot => {
+        vendas = snapshot.docs.map(doc => ({
+          firebaseDocId: doc.id,
+          ...doc.data()
+        }));
+
+        firebasePronto = true;
+        renderizar();
+      }, erro => {
+        console.error("Erro ao carregar vendas:", erro);
+        alert("Não consegui carregar as vendas do Firebase. Confira as regras do Firestore.");
+        renderizar();
+      });
+    }
+
+    iniciarFirebase();
   </script>
 </body>
 </html>
