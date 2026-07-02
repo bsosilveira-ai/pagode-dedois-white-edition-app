@@ -689,7 +689,17 @@
             <td>${v.quantidade}</td>
             <td>${v.loteNome}<br><span class="small">${moeda(v.valor)} un.</span></td>
             <td>${moeda(totalVenda(v))}</td>
-            <td><span class="badge ${v.status}">${v.status}</span></td>
+            <td>
+              <span class="badge ${v.status}">${v.status}</span><br>
+              ${v.status !== "Cancelado" ? `
+                <select style="margin-top:6px; padding:8px; border-radius:8px; border:1px solid #ddd; width:100%;" onchange="alterarStatus(${v.id}, this.value)">
+                  <option value="Pago" ${v.status === "Pago" ? "selected" : ""}>Pago</option>
+                  <option value="Reservado" ${v.status === "Reservado" ? "selected" : ""}>Reservado</option>
+                  <option value="Pendente" ${v.status === "Pendente" ? "selected" : ""}>Pendente</option>
+                  <option value="Cortesia" ${v.status === "Cortesia" ? "selected" : ""}>Cortesia</option>
+                </select>
+              ` : ""}
+            </td>
             <td>${v.vendedor}</td>
             <td>${v.status !== "Cancelado" ? `<button class="danger" onclick="cancelar(${v.id})">Cancelar</button>` : ""}</td>
           `;
@@ -705,6 +715,18 @@
       } catch (erro) {
         console.error("Erro ao cancelar venda:", erro);
         alert("Não consegui cancelar no Firebase.");
+      }
+    }
+
+    async function alterarStatus(id, novoStatus) {
+      try {
+        await vendasRef.doc(String(id)).update({
+          status: novoStatus,
+          statusAtualizadoEm: new Date().toLocaleString("pt-BR")
+        });
+      } catch (erro) {
+        console.error("Erro ao alterar status:", erro);
+        alert("Não consegui alterar o status no Firebase.");
       }
     }
 
